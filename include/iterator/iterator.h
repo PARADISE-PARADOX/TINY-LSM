@@ -72,7 +72,7 @@ public:
   HeapIterator(std::vector<SearchItem> item_vec, uint64_t max_tranc_id);
   pointer operator->() const; //重载箭头运算符，返回指向当前元素的指针。
   virtual value_type operator*() const override; //重载解引用运算符，返回当前元素
-  BaseIterator &operator++() override;
+  BaseIterator &operator++() override; //++运算符，让迭代器移动到下一个元素。
   BaseIterator operator++(int) = delete; //禁用后置自增运算符，= delete 表示该函数被删除，不能被调用。
   virtual bool operator==(const BaseIterator &other) const override;
   virtual bool operator!=(const BaseIterator &other) const override;

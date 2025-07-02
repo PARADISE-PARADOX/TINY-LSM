@@ -32,6 +32,7 @@ void TwoMergeIterator::skip_by_tranc_id() {
 
 BaseIterator &TwoMergeIterator::operator++() {
   // TODO: Lab 4.4: 实现 ++ 重载
+  return *this;
 }
 
 bool TwoMergeIterator::operator==(const BaseIterator &other) const {
