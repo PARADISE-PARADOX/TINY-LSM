@@ -179,10 +179,6 @@ bool HeapIterator::top_value_legal() const {
     return false;
   }
 
-  if(max_tranc_id_==0){
-    return items.top().value_.size() > 0;
-  }
-
   if (items.top().tranc_id_ <= max_tranc_id_) {
     // 事务id可见, 则判断其value是否为空
     return items.top().value_.size() > 0;

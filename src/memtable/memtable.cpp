@@ -378,14 +378,95 @@ HeapIterator MemTable::iters_preffix(const std::string &preffix,
                                      uint64_t tranc_id) {
 
   // TODO Lab 2.3 MemTable 的前缀迭代器
+  spdlog::trace("MemTable--iters_preffix('{}'): trace_id is {}",preffix,tranc_id);
+  std::shared_lock<std::shared_mutex> shared_cur_lock(cur_mtx);
+  std::shared_lock<std::shared_mutex> shared_frozen_lock(frozen_mtx);
+  std::vector<SearchItem> item_vector;
 
-  return {};
+  //将活跃表current_table中的内容存放到item_vector中
+   for (auto it = current_table->begin_preffix(preffix);
+       it != current_table->end_preffix(preffix); ++it){
+    if(tranc_id != 0 && tranc_id < it.get_tranc_id()){
+      //如果事务id小于当前元素的事务id，说明该元素不可见，所以跳过
+      continue;
+    }
+    if(!item_vector.empty() && item_vector.back().key_ == it.get_key()){
+      //如果当前元素的key和value与item_vector中的最后一个元素的key相等，保留最新的事务记录
+      continue;
+    }
+    item_vector.emplace_back(it.get_key(),it.get_value(),0,0,it.get_tranc_id());
+  }
+
+  // 将冻结表的值放入item_vector
+  int idx = 1;
+  for(const auto& table : frozen_tables) {
+    for(auto it = table->begin_preffix(preffix); it != table->end_preffix(preffix); ++it) {
+      if(tranc_id != 0 && tranc_id < it.get_tranc_id()) {
+        continue;
+      }
+       if(!item_vector.empty() && item_vector.back().key_ == it.get_key()){
+      //如果当前元素的key和value与item_vector中的最后一个元素的key相等，保留最新的事务记录
+      continue;
+    }
+      item_vector.emplace_back(it.get_key(), it.get_value(), idx, 0, it.get_tranc_id());
+    }
+    idx++;
+  }
+
+  return HeapIterator(item_vector,tranc_id);
 }
 
 std::optional<std::pair<HeapIterator, HeapIterator>>
 MemTable::iters_monotony_predicate(
-    uint64_t tranc_id, std::function<int(const std::string &)> predicate) {
+  uint64_t tranc_id, std::function<int(const std::string &)> predicate) {
   // TODO Lab 2.3 MemTable 的谓词查询迭代器起始范围
-  return std::nullopt;
+  spdlog::trace("MemTable--iters_monotony_predicate(tranc_id={}) called",tranc_id);
+  std::shared_lock<std::shared_mutex> shared_cur_lock(cur_mtx);
+  std::shared_lock<std::shared_mutex> shared_frozen_lock(frozen_mtx);
+  std::vector<SearchItem> item_vector;
+
+  auto cur_res = current_table->iters_monotony_predicate(predicate);
+  if(cur_res.has_value()){
+    auto [begin,end] = cur_res.value();
+    for(auto it = begin;it!=end;++it){
+      if(tranc_id != 0 && tranc_id < it.get_tranc_id()){
+        continue;
+      }
+
+      if (!item_vector.empty() && item_vector.back().key_ == it.get_key()){
+        continue;
+      }
+      item_vector.emplace_back(it.get_key(),it.get_value(),0,0,it.get_tranc_id());
+
+      spdlog::trace("MemTable--iters_monotony_predicate(): get range from curent table");
+    }
+  }
+
+  int idx = 1;
+  for(const auto& table : frozen_tables) {
+    auto res = table->iters_monotony_predicate(predicate);
+    if(res.has_value()){
+      auto [begin,end] = res.value();
+      for(auto it=begin;it!=end;++it){
+        if(tranc_id != 0 && tranc_id < it.get_tranc_id()){
+          continue;
+        }
+        if (!item_vector.empty() && item_vector.back().key_ == it.get_key()){
+          continue;
+        }
+        item_vector.emplace_back(it.get_key(),it.get_value(),idx,0,it.get_tranc_id());
+      }
+      spdlog::trace("MemTable--iters_monotony_predicate(): get range from table{}", idx);
+    }
+    idx++;
+  }
+
+  if (item_vector.empty()) {
+    spdlog::trace(
+        "MemTable--iters_monotony_predicate(): No matching keys found");
+
+    return std::nullopt;
+  }
+  return std::make_pair(HeapIterator(item_vector, tranc_id), HeapIterator{});
 }
 } // namespace toni_lsm
