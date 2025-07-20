@@ -198,39 +198,46 @@ TEST_F(SSTTest, LargeSST) {
 }
 
 TEST_F(SSTTest, LargeSSTPredicate) {
-  SSTBuilder builder(4096, true); // 4KB blocks
+  SSTBuilder builder(4096, true); // 使用更大的block大小
   auto block_cache = std::make_shared<BlockCache>(
       TomlConfig::getInstance().getLsmBlockCacheCapacity(),
       TomlConfig::getInstance().getLsmBlockCacheK());
 
   // 添加大量数据
   for (int i = 0; i < 1000; i++) {
-    // key格式：key000, key001, ..., key999
-    std::string key = "key" + std::string(3 - std::to_string(i).length(), '0') +
-                      std::to_string(i);
-
-    // value格式：val000, val001, ..., val999
-    std::string value = "val" +
-                        std::string(3 - std::to_string(i).length(), '0') +
-                        std::to_string(i);
-
+    std::string key = "key" + std::to_string(i);
+    std::string value = "val" + std::to_string(i);
     builder.add(key, value, 0);
   }
 
   auto sst = builder.build(1, "test_data/large.sst", block_cache);
 
+  // 打印每个block的key范围
+  for (size_t i = 0; i < sst->num_blocks(); i++) {
+    auto block = sst->read_block(i);
+    auto begin_it = block->begin(0);
+    std::cout << "Block " << i << ": ";
+    if (!begin_it.is_end()) {
+      std::string first_key = (*begin_it).first;
+      std::string last_key;
+      while (!begin_it.is_end()) {
+        last_key = (*begin_it).first;
+        ++begin_it;
+      }
+      std::cout << first_key << " - " << last_key;
+    }
+    std::cout << std::endl;
+  }
+
   auto result =
       sst_iters_monotony_predicate(sst, 0, [](const std::string &key) {
         if (key < "key100") {
-          return 1;
-          ;
+          return -1;  // key太小，需要向左找
         }
         if (key > "key500") {
-          return -1;
-          ;
+          return 1;   // key太大，需要向右找
         }
-        return 0;
-        // return key >= "key100" && key <= "key500";
+        return 0;     // key在范围内
       });
   EXPECT_TRUE(result.has_value());
   auto [iter_begin, iter_end] = result.value();

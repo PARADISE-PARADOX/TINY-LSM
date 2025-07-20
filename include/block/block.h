@@ -35,7 +35,7 @@ class Block : public std::enable_shared_from_this<Block> {
 private:
   std::vector<uint8_t> data;
   std::vector<uint16_t> offsets;
-  size_t capacity;
+  size_t capacity; // 每个entry的最大容量
 
   struct Entry {
     std::string key;
@@ -68,8 +68,8 @@ public:
   std::optional<std::string> get_value_binary(const std::string &key,
                                               uint64_t tranc_id);
 
-  size_t size() const;
-  size_t cur_size() const;
+  size_t size() const; // 返回entry的数量
+  size_t cur_size() const; //返回entry占用的字节数
   bool is_empty() const;
   std::optional<size_t> get_idx_binary(const std::string &key,
                                        uint64_t tranc_id);
