@@ -44,7 +44,7 @@ private:
 
 private:
   std::shared_ptr<Block> block;                   // 指向所属的 Block
-  size_t current_index;                           // 当前位置的索引
+  size_t current_index;                           // 当前位置的索引（对应的offset的索引）
   uint64_t tranc_id_;                             // 当前事务 id
   mutable std::optional<value_type> cached_value; // 缓存当前值
 };

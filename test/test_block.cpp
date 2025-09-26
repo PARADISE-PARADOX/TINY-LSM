@@ -1,7 +1,6 @@
 #include "../include/block/block.h"
 #include "../include/block/block_iterator.h"
 #include "../include/config/config.h"
-#include "../include/consts.h"
 #include "../include/logger/logger.h"
 #include <gtest/gtest.h>
 #include <iomanip>
@@ -74,7 +73,7 @@ protected:
 // 测试解码
 TEST_F(BlockTest, DecodeTest) {
   auto encoded = getEncodedBlock();
-  auto block = Block::decode(encoded);
+  auto block = Block::decode(encoded, false);
 
   // 验证第一个key
   EXPECT_EQ(block->get_first_key(), "apple");
@@ -186,7 +185,7 @@ TEST_F(BlockTest, LargeDataTest) {
 // 测试错误处理
 TEST_F(BlockTest, ErrorHandlingTest) {
   // 测试解码无效数据
-  std::vector<uint8_t> invalid_data = {1, 2, 3}; // 太短
+  std::vector<uint8_t> invalid_data = {1}; // 太短
   EXPECT_THROW(Block::decode(invalid_data), std::runtime_error);
 
   // 测试空vector
@@ -241,6 +240,37 @@ TEST_F(BlockTest, IteratorTest) {
     EXPECT_EQ(it->second, test_data[count].second);
     count++;
   }
+}
+
+// 包含多个事务操作的key的迭代器
+TEST_F(BlockTest, TrancIteratorTest) {
+  auto block = std::make_shared<Block>(4096);
+
+  // 添加多个事务操作的key
+  block->add_entry("key1", "value1", 1, false);
+
+  block->add_entry("key2", "value222", 3, false);
+  block->add_entry("key2", "value22", 2, false);
+  block->add_entry("key2", "value2", 1, false);
+
+  block->add_entry("key3", "value3", 1, false);
+  block->add_entry("key4", "value4", 2, false);
+  block->add_entry("key5", "value5", 3, false);
+
+  std::vector<std::pair<std::string, std::string>> expected_data = {
+      {"key1", "value1"},
+      {"key2", "value222"},
+      {"key3", "value3"},
+      {"key4", "value4"},
+      {"key5", "value5"}};
+
+  std::vector<std::pair<std::string, std::string>> results;
+
+  for (auto it = block->begin(); it != block->end(); ++it) {
+    results.emplace_back(it->first, it->second);
+  }
+
+  EXPECT_EQ(results, expected_data);
 }
 
 TEST_F(BlockTest, PredicateTest) {
@@ -305,37 +335,6 @@ TEST_F(BlockTest, PredicateTest) {
     ++(*it_begin);
   }
   EXPECT_EQ((*it_begin)->first, "key0025");
-}
-
-// 包含多个事务操作的key的迭代器
-TEST_F(BlockTest, TrancIteratorTest) {
-  auto block = std::make_shared<Block>(4096);
-
-  // 添加多个事务操作的key
-  block->add_entry("key1", "value1", 1, false);
-
-  block->add_entry("key2", "value222", 3, false);
-  block->add_entry("key2", "value22", 2, false);
-  block->add_entry("key2", "value2", 1, false);
-
-  block->add_entry("key3", "value3", 1, false);
-  block->add_entry("key4", "value4", 2, false);
-  block->add_entry("key5", "value5", 3, false);
-
-  std::vector<std::pair<std::string, std::string>> expected_data = {
-      {"key1", "value1"},
-      {"key2", "value222"},
-      {"key3", "value3"},
-      {"key4", "value4"},
-      {"key5", "value5"}};
-
-  std::vector<std::pair<std::string, std::string>> results;
-
-  for (auto it = block->begin(); it != block->end(); ++it) {
-    results.emplace_back(it->first, it->second);
-  }
-
-  EXPECT_EQ(results, expected_data);
 }
 
 // 包含了事务的谓词迭代器

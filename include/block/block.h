@@ -57,10 +57,10 @@ public:
   Block() = default;
   Block(size_t capacity);
   // ! 这里的编码函数不包括 hash
-  std::vector<uint8_t> encode();
+  std::vector<uint8_t> encode(bool with_hash = true);
   // ! 这里的解码函数可指定切片是否包括 hash
   static std::shared_ptr<Block> decode(const std::vector<uint8_t> &encoded,
-                                       bool with_hash = false);
+                                       bool with_hash = true);
   std::string get_first_key();
   size_t get_offset_at(size_t idx) const;
   bool add_entry(const std::string &key, const std::string &value,
