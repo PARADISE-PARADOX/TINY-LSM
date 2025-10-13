@@ -250,7 +250,7 @@ LSMEngine::get_batch(const std::vector<std::string> &keys, uint64_t tranc_id) {
     }
   }
 
- // 3. 从其他层级 SST 文件中批量查找未命中的键
+  // 3. 从其他层级 SST 文件中批量查找未命中的键
   for (size_t level = 1; level <= cur_max_level; level++) {
     std::deque<size_t> l_sst_ids = level_sst_ids[level];
 
@@ -320,8 +320,7 @@ LSMEngine::sst_get_(const std::string &key, uint64_t tranc_id) {
     }
   }
 
-
-   // 2. 其他level的sst中查询
+  // 2. 其他level的sst中查询
   for (size_t level = 1; level <= cur_max_level; level++) {
     std::deque<size_t> l_sst_ids = level_sst_ids[level];
     // 二分查询
@@ -527,29 +526,126 @@ std::optional<std::pair<TwoMergeIterator, TwoMergeIterator>>
 LSMEngine::lsm_iters_monotony_predicate(
     uint64_t tranc_id, std::function<int(const std::string &)> predicate) {
   // TODO: Lab 4.7 谓词查询
-  return std::nullopt;
+    //  先从 memtable 中查询
+  auto mem_result = memtable.iters_monotony_predicate(tranc_id, predicate);
+
+  // 再从 sst 中查询
+  std::vector<SearchItem> item_vec;
+  for (auto &[sst_level, sst_ids] : level_sst_ids) {
+    for (auto &sst_id : sst_ids) {
+      auto sst = ssts[sst_id];
+      auto result = sst_iters_monotony_predicate(sst, tranc_id, predicate);
+      if (!result.has_value()) {
+        continue;
+      }
+
+      auto [it_begin, it_end] = result.value();
+      for (; it_begin != it_end && it_begin.is_valid(); ++it_begin) {
+        // l0中, 这里越古老的sst的idx越小, 我们需要让新的sst优先在堆顶
+        // 让新的sst(拥有更大的idx)排序在前面, 反转符号就行了
+        if (tranc_id != 0 && it_begin.get_tranc_id() > tranc_id) {
+          // 如果开启了事务, 比当前事务 id 更大的记录是不可见的
+          continue;
+        }
+        if (!item_vec.empty() && item_vec.back().key_ == it_begin.key()) {
+          // 如果key相同，则只保留最新的事务修改的记录即可
+          // 且这个记录既然已经存在于item_vec中，则其肯定满足了事务的可见性判断
+          continue;
+        }
+        item_vec.emplace_back(it_begin.key(), it_begin.value(), -sst_id,
+                              sst_level, it_begin.get_tranc_id());
+      }
+    }
+  }
 }
 
 Level_Iterator LSMEngine::begin(uint64_t tranc_id) {
   // TODO: Lab 4.7
-  throw std::runtime_error("Not implemented");
+  return Level_Iterator(shared_from_this(), tranc_id);
 }
 
 Level_Iterator LSMEngine::end() {
   // TODO: Lab 4.7
-  throw std::runtime_error("Not implemented");
+  return Level_Iterator{};
 }
 
 void LSMEngine::full_compact(size_t src_level) {
   // TODO: Lab 4.5 负责完成整个 full compact
   // ? 你可能需要控制`Compact`流程需要递归地进行
+
+  // 将 src_level 的 sst 全体压缩到 src_level + 1
+
+  // 递归地判断下一级 level 是否需要 full compact
+  if (level_sst_ids[src_level + 1].size() >=
+      TomlConfig::getInstance().getLsmSstLevelRatio()) {
+    full_compact(src_level + 1);
+  }
+
+  // 获取源level和目标level的 sst_id
+  auto old_level_id_x = level_sst_ids[src_level];
+  auto old_level_id_y = level_sst_ids[src_level + 1];
+  std::vector<std::shared_ptr<SST>> new_ssts;
+  std::vector<size_t> lx_ids(old_level_id_x.begin(), old_level_id_x.end());
+  std::vector<size_t> ly_ids(old_level_id_y.begin(), old_level_id_y.end());
+  if (src_level == 0) {
+    // l0这一层不同sst的key有重叠, 需要额外处理
+    new_ssts = full_l0_l1_compact(lx_ids, ly_ids);
+  } else {
+    new_ssts = full_common_compact(lx_ids, ly_ids, src_level + 1);
+  }
+  // 完成 compact 后移除旧的sst记录
+  for (auto &old_sst_id : old_level_id_x) {
+    ssts[old_sst_id]->del_sst();
+    ssts.erase(old_sst_id);
+  }
+  for (auto &old_sst_id : old_level_id_y) {
+    ssts[old_sst_id]->del_sst();
+    ssts.erase(old_sst_id);
+  }
+  level_sst_ids[src_level].clear();
+  level_sst_ids[src_level + 1].clear();
+
+  cur_max_level = std::max(cur_max_level, src_level + 1);
+
+  // 添加新的sst
+  for (auto &new_sst : new_ssts) {
+    level_sst_ids[src_level + 1].push_back(new_sst->get_sst_id());
+    ssts[new_sst->get_sst_id()] = new_sst;
+  }
+  // 此处没必要reverse了
+  std::sort(level_sst_ids[src_level + 1].begin(),
+            level_sst_ids[src_level + 1].end());
 }
 
 std::vector<std::shared_ptr<SST>>
 LSMEngine::full_l0_l1_compact(std::vector<size_t> &l0_ids,
                               std::vector<size_t> &l1_ids) {
   // TODO: Lab 4.5 负责完成 l0 和 l1 的 full compact
-  return {};
+  std::vector<SstIterator> l0_iters;
+  std::vector<std::shared_ptr<SST>> l1_ssts;
+
+  for (auto id : l0_ids) {
+    auto sst_it = ssts[id]->begin(0);
+    l0_iters.push_back(sst_it);
+  }
+  for (auto id : l1_ids) {
+    l1_ssts.push_back(ssts[id]);
+  }
+  // l0 的sst之间的key有重叠, 需要合并
+  auto [l0_begin, l0_end] = SstIterator::merge_sst_iterator(l0_iters, 0);
+
+  std::shared_ptr<HeapIterator> l0_begin_ptr = std::make_shared<HeapIterator>();
+  *l0_begin_ptr = l0_begin;
+
+  std::shared_ptr<ConcactIterator> old_l1_begin_ptr =
+      std::make_shared<ConcactIterator>(l1_ssts, 0);
+
+  TwoMergeIterator l0_l1_begin(l0_begin_ptr, old_l1_begin_ptr, 0);
+
+  return gen_sst_from_iter(l0_l1_begin,
+                           TomlConfig::getInstance().getLsmPerMemSizeLimit() *
+                               TomlConfig::getInstance().getLsmSstLevelRatio(),
+                           1);
 }
 
 std::vector<std::shared_ptr<SST>>
@@ -557,7 +653,26 @@ LSMEngine::full_common_compact(std::vector<size_t> &lx_ids,
                                std::vector<size_t> &ly_ids, size_t level_y) {
   // TODO: Lab 4.5 负责完成其他相邻 level 的 full compact
 
-  return {};
+  std::vector<std::shared_ptr<SST>> lx_iters;
+  std::vector<std::shared_ptr<SST>> ly_iters;
+
+  for (auto id : lx_ids) {
+    lx_iters.push_back(ssts[id]);
+  }
+  for (auto id : ly_ids) {
+    ly_iters.push_back(ssts[id]);
+  }
+
+  std::shared_ptr<ConcactIterator> old_lx_begin_ptr =
+      std::make_shared<ConcactIterator>(lx_iters, 0);
+
+  std::shared_ptr<ConcactIterator> old_ly_begin_ptr =
+      std::make_shared<ConcactIterator>(ly_iters, 0);
+
+  TwoMergeIterator lx_ly_begin(old_lx_begin_ptr, old_ly_begin_ptr, 0);
+
+  return gen_sst_from_iter(lx_ly_begin, LSMEngine::get_sst_size(level_y),
+                           level_y);
 }
 
 std::vector<std::shared_ptr<SST>>
@@ -565,7 +680,45 @@ LSMEngine::gen_sst_from_iter(BaseIterator &iter, size_t target_sst_size,
                              size_t target_level) {
   // TODO: Lab 4.5 实现从迭代器构造新的 SST
 
-  return {};
+  std::vector<std::shared_ptr<SST>> new_ssts;
+  auto new_sst_builder =
+      SSTBuilder(TomlConfig::getInstance().getLsmBlockSize(), true);
+
+  //遍历迭代器中的数据项，添加到构建器中。
+  while (iter.is_valid() && !iter.is_end()) {
+    new_sst_builder.add((*iter).first, (*iter).second, 0);
+    ++iter;
+
+    if (new_sst_builder.estimated_size() >= target_sst_size) {
+      size_t sst_id = next_sst_id++; // TODO: 后续优化并发性
+      std::string sst_path = get_sst_path(sst_id, target_level);
+      auto new_sst = new_sst_builder.build(sst_id, sst_path, this->block_cache);
+      new_ssts.push_back(new_sst);
+
+      spdlog::debug("LSMEngine--"
+                    "Compaction: Generated new SST file with sst_id={}"
+                    "at level{}",
+                    sst_id, target_level);
+
+      new_sst_builder = SSTBuilder(TomlConfig::getInstance().getLsmBlockSize(),
+                                   true); // 重置builder
+    }
+  }
+
+  // 上述过程完成后，如果构建器中还存在一些剩余的键值对，将这些内容构建成新的sst
+  if (new_sst_builder.estimated_size() > 0) {
+    size_t sst_id = next_sst_id++; // TODO: 后续优化并发性
+    std::string sst_path = get_sst_path(sst_id, target_level);
+    auto new_sst = new_sst_builder.build(sst_id, sst_path, this->block_cache);
+    new_ssts.push_back(new_sst);
+
+    spdlog::debug("LSMEngine--"
+                  "Compaction: Generated new SST file with sst_id={} "
+                  "at level{}",
+                  sst_id, target_level);
+  }
+
+  return new_ssts;
 }
 
 size_t LSMEngine::get_sst_size(size_t level) {
