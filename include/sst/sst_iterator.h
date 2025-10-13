@@ -25,10 +25,10 @@ class SstIterator : public BaseIterator {
   friend SST;
 
 private:
-  std::shared_ptr<SST> m_sst;
-  size_t m_block_idx;
+  std::shared_ptr<SST> m_sst; //原始的SST对象指针，通过shared_ptr进行自动内存管理
+  size_t m_block_idx; // 当前block在SST中的位置，SST 文件由多个数据块组成，这个变量记录当前正在访问的是第几个块
   uint64_t max_tranc_id_;
-  std::shared_ptr<BlockIterator> m_block_it;
+  std::shared_ptr<BlockIterator> m_block_it; //当前数据块的迭代器
   mutable std::optional<value_type> cached_value; // 缓存当前值
 
   void update_current() const;
