@@ -526,7 +526,7 @@ std::optional<std::pair<TwoMergeIterator, TwoMergeIterator>>
 LSMEngine::lsm_iters_monotony_predicate(
     uint64_t tranc_id, std::function<int(const std::string &)> predicate) {
   // TODO: Lab 4.7 谓词查询
-    //  先从 memtable 中查询
+  //  先从 memtable 中查询
   auto mem_result = memtable.iters_monotony_predicate(tranc_id, predicate);
 
   // 再从 sst 中查询
@@ -556,6 +556,30 @@ LSMEngine::lsm_iters_monotony_predicate(
                               sst_level, it_begin.get_tranc_id());
       }
     }
+  }
+  std::shared_ptr<HeapIterator> l0_iter_ptr =
+      std::make_shared<HeapIterator>(item_vec, tranc_id);
+
+  //如果上述结果都没有，直接返回即可
+  if (!mem_result.has_value() && item_vec.empty()) {
+    return std::nullopt;
+  }
+
+  if (mem_result.has_value()) {
+    auto [mem_start, mem_end] = mem_result.value();
+    std::shared_ptr<HeapIterator> mem_start_ptr =
+        std::make_shared<HeapIterator>();
+    *mem_start_ptr = mem_start;
+    auto start = TwoMergeIterator(mem_start_ptr, l0_iter_ptr, tranc_id);
+    auto end = TwoMergeIterator{};
+    return std::make_optional<std::pair<TwoMergeIterator, TwoMergeIterator>>(
+        start, end);
+  } else {
+    auto start = TwoMergeIterator(std::make_shared<HeapIterator>(), l0_iter_ptr,
+                                  tranc_id);
+    auto end = TwoMergeIterator{};
+    return std::make_optional<std::pair<TwoMergeIterator, TwoMergeIterator>>(
+        start, end);
   }
 }
 
