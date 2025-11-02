@@ -45,8 +45,8 @@ public:
   std::shared_ptr<LSMEngine> engine_;
   std::shared_ptr<TranManager> tranManager_;
   uint64_t tranc_id_;
-  std::vector<Record> operations;
-  std::unordered_map<std::string, std::string> temp_map_;
+  std::vector<Record> operations; // 事务操作记录，转为WAL日志
+  std::unordered_map<std::string, std::string> temp_map_; // 事务上下文中的临时数据
   bool isCommited = false;
   bool isAborted = false;
   enum IsolationLevel isolation_level_;
@@ -54,10 +54,10 @@ public:
 private:
   std::unordered_map<std::string,
                      std::optional<std::pair<std::string, uint64_t>>>
-      read_map_;
+      read_map_; // 首次读取后会存储其内容，这样重复读的时候不会出现幻读的情况
   std::unordered_map<std::string,
                      std::optional<std::pair<std::string, uint64_t>>>
-      rollback_map_;
+      rollback_map_; // 事务回滚记录, 主要用于事务的回滚
 };
 
 class TranManager : public std::enable_shared_from_this<TranManager> {

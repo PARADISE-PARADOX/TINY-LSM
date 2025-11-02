@@ -798,6 +798,9 @@ LSM::get_batch(const std::vector<std::string> &keys) {
   return results;
 }
 
+/*
+  LSM查询接口中分配了一个事务id
+*/
 void LSM::put(const std::string &key, const std::string &value,
               bool tranc_off) {
   auto tranc_id = tranc_off ? 0 : tran_manager_->getNextTransactionId();
