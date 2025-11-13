@@ -8,7 +8,7 @@
 
 namespace tiny_lsm {
 
-enum class OperationType {
+enum class OperationType: uint8_t {
   CREATE,
   COMMIT,
   ROLLBACK,
