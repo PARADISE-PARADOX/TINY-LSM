@@ -296,7 +296,7 @@ TranManager::TranManager(std::string data_dir) : data_dir_(data_dir) {
   // TODO: Lab 5.2 初始化时读取持久化的事务状态信息
 
   if (!std::filesystem::exists(file_path)) {
-    tranc_id_file_ = `FileObj::open(file_path, true);
+    tranc_id_file_ = FileObj::open(file_path, true);
   } else {
     tranc_id_file_ = FileObj::open(file_path, false);
     read_tranc_id_file();
