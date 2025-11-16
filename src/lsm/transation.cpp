@@ -305,6 +305,22 @@ TranManager::TranManager(std::string data_dir) : data_dir_(data_dir) {
 
 void TranManager::init_new_wal() {
   // TODO: Lab 5.x 初始化 wal
+<<<<<<< HEAD
+=======
+  spdlog::info("TranManager--init_new_wal(): Cleaning up old WAL files");
+
+  // 清除原先的日志
+  for (const auto &entry : std::filesystem::directory_iterator(data_dir_)) {
+    if (entry.path().filename().string().find("wal.") == 0) {
+      std::filesystem::remove(entry.path());
+    }
+  }
+
+  // 创建新的日志
+  wal =std::make_shared<WAL>(data_dir_, 128, max_finished_tranc_id_, 1, 4096);
+
+  spdlog::info("TranManager--init_new_wal(): New WAL initialized");
+>>>>>>> 75e9754 (recover)
 }
 
 void TranManager::set_engine(std::shared_ptr<LSMEngine> engine) {
@@ -329,17 +345,27 @@ void TranManager::write_tranc_id_file() {
   memcpy(ptr, &nextTransactionId, sizeof(uint64_t));
   ptr += sizeof(uint64_t);
 
+<<<<<<< HEAD
   memcpy(ptr,&max_flushed_tranc_id, sizeof(uint64_t));
   ptr += sizeof(uint64_t);
 
   memcpy(ptr,&max_finished_tranc_id, sizeof(uint64_t));
 
+=======
+  memcpy(ptr, &max_flushed_tranc_id, sizeof(uint64_t));
+  ptr += sizeof(uint64_t);
+
+  memcpy(ptr, &max_finished_tranc_id, sizeof(uint64_t));
+>>>>>>> 75e9754 (recover)
 
   // 写入磁盘，实现持久化
   tranc_id_file_.write(0, now_id);
   tranc_id_file_.sync();
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 75e9754 (recover)
 }
 
 void TranManager::read_tranc_id_file() {
@@ -418,11 +444,35 @@ std::string TranManager::get_tranc_id_file_path() {
 
 std::map<uint64_t, std::vector<Record>> TranManager::check_recover() {
   // TODO: Lab 5.5
-  return {};
+  spdlog::info("TranManager--check_recover(): Starting recovery from WAL");
+
+  //
+  std::map<uint64_t, std::vector<Record>> wal_records =
+      WAL::recover(data_dir_, max_flushed_tranc_id_);
+
+  spdlog::info("TranManager--check_recover(): Recovered {} transactions",
+               wal_records.size());
+
+  return wal_records;
 }
 
 bool TranManager::write_to_wal(const std::vector<Record> &records) {
   // TODO: Lab 5.4
+  spdlog::trace("TranManager--write_to_wal(): Writing {} records to WAL",
+                records.size());
+
+  try {
+    wal->log(records, true);
+  } catch (const std::exception &e) {
+    spdlog::error("TranManager--write_to_wal(): Exception occurred: {}",
+                  e.what());
+
+    return false;
+  }
+
+  spdlog::trace(
+      "TranManager--write_to_wal(): Successfully wrote {} records to WAL",
+      records.size());
 
   return true;
 }

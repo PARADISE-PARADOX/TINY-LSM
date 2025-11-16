@@ -760,6 +760,53 @@ LSM::LSM(std::string path)
     : engine(std::make_shared<LSMEngine>(path)),
       tran_manager_(std::make_shared<TranManager>(path)) {
   // TODO: Lab 5.5 控制WAL重放与组件的初始化
+
+  tran_manager_->set_engine(engine);
+
+  // 获取需要恢复的内容
+  auto check_recover_res = tran_manager_->check_recover();
+  size_t recovered_transactions = 0;
+  size_t recovered_records = 0;
+  for (auto &[tranc_id, records] : check_recover_res) {
+    tran_manager_->update_max_finished_tranc_id(tranc_id);
+    
+    // 限制恢复的记录数量，避免初始化时间过长
+    for (auto &record : records) {
+      if (record.getOperationType() == OperationType::PUT) {
+        engine->put(record.getKey(), record.getValue(), tranc_id);
+      } else if (record.getOperationType() == OperationType::DELETE) {
+        engine->remove(record.getKey(), tranc_id);
+      }
+      
+      recovered_records++;
+      // 如果恢复的记录超过一定数量，就停止恢复
+      if (recovered_records >= 10000) {
+        spdlog::warn("LSMEngine--Recover: Too many records to recover, stopping at 10000 records");
+        break;
+      }
+    }
+    
+    if (recovered_records >= 10000) {
+      break;
+    }
+    
+    spdlog::debug("LSMEngine--"
+                  "Recover: Recovered transaction with tranc_id={}",
+                  tranc_id);
+    
+    // 添加恢复进度日志
+    recovered_transactions++;
+    if (recovered_transactions % 100 == 0) {
+      spdlog::info("LSMEngine--Recover: Recovered {} transactions so far", recovered_transactions);
+    }
+  }
+  
+  if (recovered_transactions > 0 || recovered_records > 0) {
+    spdlog::info("LSMEngine--Recover: Total recovered transactions: {}, records: {}", 
+                 recovered_transactions, recovered_records);
+  }
+  
+  tran_manager_->init_new_wal();
 }
 
 LSM::~LSM() {

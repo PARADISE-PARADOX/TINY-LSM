@@ -11,8 +11,13 @@ using namespace ::tiny_lsm;
 class MockWAL : public WAL {
 public:
   MockWAL(const std::string &log_path, size_t buffer_size,
+<<<<<<< HEAD
           uint64_t max_finished_tranc_id)
       : WAL(log_path, buffer_size, max_finished_tranc_id, 1, 100) {}
+=======
+          uint64_t checkpoint_tranc_id)
+      : WAL(log_path, buffer_size, checkpoint_tranc_id, 1, 100) {}
+>>>>>>> 75e9754 (recover)
 
   MOCK_METHOD(void, cleaner, ());
   MOCK_METHOD(void, cleanWALFile, ());
@@ -24,11 +29,11 @@ public:
 
   size_t get_file_size_limit() { return file_size_limit_; }
 
-  void set_max_finished_tranc_id(uint64_t max_finished_tranc_id) {
-    max_finished_tranc_id_ = max_finished_tranc_id;
+  void set_checkpoint_tranc_id(uint64_t checkpoint_tranc_id) {
+    checkpoint_tranc_id_= checkpoint_tranc_id;
   }
 
-  uint64_t get_max_finished_tranc_id() { return max_finished_tranc_id_; }
+  uint64_t get_checkpoint_tranc_id() { return checkpoint_tranc_id_; }
 };
 
 class WALTest : public ::testing::Test {
