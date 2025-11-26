@@ -20,6 +20,18 @@ private:
   std::unique_ptr<LSM> lsm;
   std::shared_mutex redis_mtx;
 
+
+private:
+  // 检查 hash 的 key 是否过期并清理, 过期返回 true
+  bool expire_hash_clean(const std::string &key,
+                         std::shared_lock<std::shared_mutex> &rlock);
+  bool expire_list_clean(const std::string &key,
+                         std::shared_lock<std::shared_mutex> &rlock);
+  bool expire_zset_clean(const std::string &key,
+                         std::shared_lock<std::shared_mutex> &rlock);
+  bool expire_set_clean(const std::string &key,
+                        std::shared_lock<std::shared_mutex> &rlock);
+
 public:
   RedisWrapper(const std::string &db_path);
   void clear();

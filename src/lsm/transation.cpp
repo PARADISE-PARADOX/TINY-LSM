@@ -305,8 +305,6 @@ TranManager::TranManager(std::string data_dir) : data_dir_(data_dir) {
 
 void TranManager::init_new_wal() {
   // TODO: Lab 5.x 初始化 wal
-<<<<<<< HEAD
-=======
   spdlog::info("TranManager--init_new_wal(): Cleaning up old WAL files");
 
   // 清除原先的日志
@@ -320,7 +318,6 @@ void TranManager::init_new_wal() {
   wal =std::make_shared<WAL>(data_dir_, 128, max_finished_tranc_id_, 1, 4096);
 
   spdlog::info("TranManager--init_new_wal(): New WAL initialized");
->>>>>>> 75e9754 (recover)
 }
 
 void TranManager::set_engine(std::shared_ptr<LSMEngine> engine) {
@@ -345,27 +342,14 @@ void TranManager::write_tranc_id_file() {
   memcpy(ptr, &nextTransactionId, sizeof(uint64_t));
   ptr += sizeof(uint64_t);
 
-<<<<<<< HEAD
-  memcpy(ptr,&max_flushed_tranc_id, sizeof(uint64_t));
-  ptr += sizeof(uint64_t);
-
-  memcpy(ptr,&max_finished_tranc_id, sizeof(uint64_t));
-
-=======
   memcpy(ptr, &max_flushed_tranc_id, sizeof(uint64_t));
   ptr += sizeof(uint64_t);
 
   memcpy(ptr, &max_finished_tranc_id, sizeof(uint64_t));
->>>>>>> 75e9754 (recover)
 
   // 写入磁盘，实现持久化
   tranc_id_file_.write(0, now_id);
   tranc_id_file_.sync();
-<<<<<<< HEAD
-
-
-=======
->>>>>>> 75e9754 (recover)
 }
 
 void TranManager::read_tranc_id_file() {

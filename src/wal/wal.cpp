@@ -3,17 +3,12 @@
 #include "../../include/wal/wal.h"
 #include <algorithm>
 #include <cstdint>
-<<<<<<< HEAD
-#include <fstream>
-#include <iostream>
-=======
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <mutex>
 #include <stdexcept>
 #include <string>
->>>>>>> 75e9754 (recover)
 #include <vector>
 
 namespace tiny_lsm {
@@ -23,8 +18,6 @@ WAL::WAL(const std::string &log_dir, size_t buffer_size,
          uint64_t max_finished_tranc_id, uint64_t clean_interval,
          uint64_t file_size_limit) {
   // TODO Lab 5.4 : 实现WAL的初始化流程
-<<<<<<< HEAD
-=======
 
   // 1.获取WAL的保存路径
   active_log_path_ = log_dir + "/wal.0";
@@ -32,13 +25,10 @@ WAL::WAL(const std::string &log_dir, size_t buffer_size,
   log_file_ = FileObj::open(active_log_path_, true);
 
   cleaner_thread_ = std::thread(&WAL::cleaner, this);
->>>>>>> 75e9754 (recover)
 }
 
 WAL::~WAL() {
   // TODO Lab 5.4 : 实现WAL的清理流程
-<<<<<<< HEAD
-=======
   // 首先需要将已经存在的WAL日志刷入
   log({}, true);
 
@@ -55,19 +45,11 @@ WAL::~WAL() {
 
   // 同步操作确保数据写入磁盘
   log_file_.sync();
->>>>>>> 75e9754 (recover)
 }
 
 std::map<uint64_t, std::vector<Record>>
 WAL::recover(const std::string &log_dir, uint64_t max_flushed_tranc_id) {
   // TODO: Lab 5.5 检查需要重放的WAL日志
-<<<<<<< HEAD
-  return {};
-}
-
-void WAL::log(const std::vector<Record> &records, bool force_flush) {
-  // TODO Lab 5.4 : 实现WAL的写入流程
-=======
   std::map<uint64_t, std::vector<Record>> tranc_records{};
 
   // 如果没有日志存在，返回空
@@ -125,7 +107,6 @@ void WAL::log(const std::vector<Record> &records, bool force_flush) {
   }
 
   return tranc_records;
->>>>>>> 75e9754 (recover)
 }
 
 // commit 时 强制写入

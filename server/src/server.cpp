@@ -5,10 +5,18 @@
 #include <memory>
 #include <string>
 #include <vector>
-
+#include <csignal>
 // 假设这些头文件和实现已经存在，并且与您的 Muduo 版本兼容
 #include "../../include/redis_wrapper/redis_wrapper.h"
 #include "../include/handler.h"
+
+asio::io_context* g_io_context = nullptr;
+
+void signalHandler(int sig) {
+  if (g_io_context) {
+    g_io_context->stop();
+  }
+}
 
 // 简单的日志宏，替代 Muduo 的 LOG_INFO
 #define ASYNC_REDIS_SERVER_LOG_INFO(msg)                                       \
@@ -122,10 +130,135 @@ private:
 
   // 与 Muduo 版本相同的 handleRequest 逻辑
   std::string handleRequest(const std::string &request) {
-    // TODO: Lab 6.6 处理网络传输的RESP字节流
-    // TODO: Lab 6.6 形成参数并调用 redis_wrapper 的api
-    // TODO: Lab 6.6 返回结果
-    return "";
+    size_t pos = 0;
+
+    if (request.empty()) {
+      return "-ERR Protocol error: expected '*'\r\n";
+    }
+
+    if (request == "PING\r\n") {
+      return "+PONG\r\n";
+    }
+
+    int numElements = 0;
+    try {
+      numElements = std::stoi(request.substr(pos + 1)); // 跳过 '*'
+    } catch (const std::exception &) {
+      return "-ERR Protocol error: invalid number of elements\r\n";
+    }
+    pos = request.find('\n', pos) + 1; // 跳过 '\r\n'
+
+    ASYNC_REDIS_SERVER_LOG_DEBUG("request: " << request << '\n');
+    ASYNC_REDIS_SERVER_LOG_DEBUG("Number of elements: " << numElements << '\n');
+
+    std::vector<std::string> args;
+
+    for (int i = 0; i < numElements; ++i) {
+      if (pos >= request.size() || request[pos] != '$') {
+        ASYNC_REDIS_SERVER_LOG_DEBUG(
+            "pos = " << pos << ", i = " << i << ", last args = "
+                     << (args.empty() ? "N/A" : args.back()) << '\n');
+        ASYNC_REDIS_SERVER_LOG_DEBUG("-ERR Protocol error: expected '$'\r\n");
+        return "-ERR Protocol error: expected '$'\r\n";
+      }
+
+      int len = 0;
+      std::string value_len;
+      int next_n_pos;
+      try {
+        next_n_pos = request.find('\n', pos);
+        len = std::stoi(request.substr(pos + 1)); // 跳过 '$'
+      } catch (const std::exception &) {
+        ASYNC_REDIS_SERVER_LOG_DEBUG(
+            "-ERR Protocol error: invalid bulk string length\r\n");
+        return "-ERR Protocol error: invalid bulk string length\r\n";
+      }
+      pos = next_n_pos + 1; // 跳过 '$' 值 \r\n
+      if (pos + len > request.size()) {
+        ASYNC_REDIS_SERVER_LOG_DEBUG(
+            "-ERR Protocol error: bulk string length exceeds request size\r\n");
+        return "-ERR Protocol error: bulk string length exceeds request "
+               "size\r\n";
+      }
+      args.push_back(request.substr(pos, len));
+      next_n_pos = request.find('\n', pos);
+      pos = next_n_pos + 1; // 跳过数据和/r/n
+    }
+    ASYNC_REDIS_SERVER_LOG_DEBUG("Parsed Request: ");
+    for (const auto &arg : args) {
+      ASYNC_REDIS_SERVER_LOG_DEBUG(arg << " ");
+    }
+    ASYNC_REDIS_SERVER_LOG_DEBUG('\n');
+
+    // 处理命令 (与 Muduo 版本相同)
+    switch (string2Ops(args[0])) {
+    case OPS::PING:
+      return "+PONG\r\n";
+    case OPS::FLUSHALL:
+      return flushall_handler(redis_);
+    case OPS::SAVE:
+      return save_handler(redis_);
+    case OPS::SET:
+      return set_handler(args, redis_);
+    case OPS::GET:
+      return get_handler(args, redis_);
+    case OPS::DEL:
+      return del_handler(args, redis_);
+    case OPS::INCR:
+      return incr_handler(args, redis_);
+    case OPS::DECR:
+      return decr_handler(args, redis_);
+    case OPS::EXPIRE:
+      return expire_handler(args, redis_);
+    case OPS::TTL:
+      return ttl_handler(args, redis_);
+    case OPS::HSET:
+      return hset_handler(args, redis_);
+    case OPS::HGET:
+      return hget_handler(args, redis_);
+    case OPS::HDEL:
+      return hdel_handler(args, redis_);
+    case OPS::HKEYS:
+      return hkeys_handler(args, redis_);
+    case OPS::LLEN:
+      return llen_handler(args, redis_);
+    case OPS::LPUSH:
+      return lpush_handler(args, redis_);
+    case OPS::RPUSH:
+      return rpush_handler(args, redis_);
+    case OPS::LPOP:
+      return lpop_handler(args, redis_);
+    case OPS::RPOP:
+      return rpop_handler(args, redis_);
+    case OPS::LRANGE:
+      return lrange_handler(args, redis_);
+    case OPS::ZADD:
+      return zadd_handler(args, redis_);
+    case OPS::ZCARD:
+      return zcard_handler(args, redis_);
+    case OPS::ZINCRBY:
+      return zincrby_handler(args, redis_);
+    case OPS::ZRANGE:
+      return zrange_handler(args, redis_);
+    case OPS::ZRANK:
+      return zrank_handler(args, redis_);
+    case OPS::ZSCORE:
+      return zscore_handler(args, redis_);
+    case OPS::ZREM:
+      return zrem_handler(args, redis_);
+    case OPS::SADD:
+      return sadd_handler(args, redis_);
+    case OPS::SMEMBERS:
+      return smembers_handler(args, redis_);
+    case OPS::SCARD:
+      return scard_handler(args, redis_); // SISMEMBER 的 args[0] 是 SCARD
+    case OPS::SISMEMBER:
+      return sismember_handler(args, redis_);
+    case OPS::SREM:
+      return srem_handler(args, redis_);
+    default:
+      return "-ERR unknown command '" + args[0] + "'\r\n";
+    }
   }
 
   tcp::socket socket_;
@@ -161,6 +294,10 @@ private:
 int main() {
   try {
     asio::io_context io_context;
+    g_io_context = &io_context;
+    // 注册信号
+    std::signal(SIGINT, signalHandler);
+    std::signal(SIGTERM, signalHandler);
     RedisServer server(io_context, 6379); // Redis 默认端口
     io_context.run();                     // 运行事件循环
   } catch (std::exception &e) {
